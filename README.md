@@ -53,7 +53,8 @@ Abrí [http://localhost:5173](http://localhost:5173).
 | `npm run lint:fix` | Corregir problemas de lint automáticamente |
 | `npm run format` | Formatear todos los archivos con Biome |
 | `npm run type-check` | Solo type-check de TypeScript (sin emitir) |
-| `npm run sync-template` | Sincronizar cambios del template base *(requiere PowerShell)* |
+| `npm run sync-template` | Sincronizar cambios del template base con la última versión *(requiere PowerShell)* |
+| `npm run sync-template -- -Tag v1.2.0` | Sincronizar con un tag específico del template |
 
 ---
 
@@ -288,32 +289,48 @@ git remote -v
 
 Antes de aplicar cualquier cambio, siempre conviene revisar qué trae el template:
 
-```bash
-# Trae la info del template sin aplicar nada todavía
+```powershell
+# Trae la info del template y sus tags sin aplicar nada todavía
 git fetch template main
+git fetch template --tags
 
 # Muestra los commits del template que no tenés en tu proyecto
 git log HEAD..template/main --oneline
 
 # Muestra exactamente qué archivos cambiaron
 git diff HEAD template/main --name-only
+
+# Ver todos los tags disponibles del template
+git tag -l
 ```
 
 #### Paso 3 — Sincronizar con el script de PowerShell
 
-La forma más segura es usar el script incluido, que crea una rama intermedia para que puedas revisar antes de mergear:
+La forma más segura es usar el script incluido, que crea una rama intermedia para que puedas revisar antes de mergear.
+
+**Sincronizar con la última versión de `main`:**
 
 ```powershell
 npm run sync-template
 ```
 
+**Sincronizar con un tag específico:**
+
+```powershell
+npm run sync-template -- -Tag v1.2.0
+```
+
+Si el tag no existe, el script lista los disponibles y aborta.
+
 El script hace esto por vos:
 
-1. Verifica que el remote `template` exista.
-2. Hace `git fetch template main`.
-3. Crea una rama `template-sync` desde tu rama actual.
-4. Ejecuta el merge en esa rama (sin commitear) para que puedas revisar.
-5. Te imprime los próximos pasos a seguir.
+1. Verifica que no haya cambios sin commitear (aborta si los hay, para no perder trabajo).
+2. Verifica que el remote `template` exista.
+3. Hace `git fetch template main` y `git fetch template --tags`.
+4. Si usás `-Tag`, verifica que ese tag exista.
+5. Crea una rama `template-sync` desde tu rama actual.
+6. Ejecuta el merge en esa rama (sin commitear) para que puedas revisar.
+7. Te imprime los próximos pasos a seguir.
 
 Después del script, revisás los cambios y completás:
 
@@ -323,7 +340,7 @@ git diff main template-sync
 
 # Si todo está bien, commiteás en la rama sync
 git add .
-git commit -m "chore: sync desde template v1.1.0"
+git commit -m "chore: sync desde template v1.2.0"
 
 # Mergeás de vuelta a tu rama principal
 git checkout main ; git merge template-sync

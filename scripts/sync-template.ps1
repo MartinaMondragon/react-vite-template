@@ -4,8 +4,14 @@
 # Requiere tener el remote "template" configurado:
 #   git remote add template <URL_DEL_TEMPLATE>
 #
-# Uso: npm run sync-template
-#      o directamente: pwsh -File scripts/sync-template.ps1
+# Uso:
+#   npm run sync-template              -> sincroniza con la ultima version de main
+#   npm run sync-template -- -Tag v1.2.0  -> sincroniza con un tag especifico
+#   powershell -File scripts/sync-template.ps1 -Tag v1.2.0
+
+param(
+    [string]$Tag = ""
+)
 
 $ErrorActionPreference = "Continue"
 
@@ -13,8 +19,14 @@ $TEMPLATE_REMOTE = "template"
 $TEMPLATE_BRANCH = "main"
 $SYNC_BRANCH     = "template-sync"
 
-Write-Host ""
-Write-Host "Sincronizando desde el template base..." -ForegroundColor Cyan
+# Determinar el ref a mergear (tag o rama)
+if ($Tag -ne "") {
+    $MERGE_REF = $Tag
+    Write-Host "Sincronizando desde el template base (tag: $Tag)..." -ForegroundColor Cyan
+} else {
+    $MERGE_REF = "$TEMPLATE_REMOTE/$TEMPLATE_BRANCH"
+    Write-Host "Sincronizando desde el template base (ultima version de $TEMPLATE_BRANCH)..." -ForegroundColor Cyan
+}
 
 # Verificar que no haya cambios sin commitear
 $uncommitted = git status --porcelain
@@ -43,9 +55,24 @@ if ($remotes -notcontains $TEMPLATE_REMOTE) {
     exit 1
 }
 
-# Traer los cambios del template (sin aplicar nada todavia)
-Write-Host "Haciendo fetch de ${TEMPLATE_REMOTE}/${TEMPLATE_BRANCH}..." -ForegroundColor Yellow
+# Traer los cambios del template y sus tags
+Write-Host "Haciendo fetch de ${TEMPLATE_REMOTE}..." -ForegroundColor Yellow
 git fetch $TEMPLATE_REMOTE $TEMPLATE_BRANCH
+git fetch $TEMPLATE_REMOTE --tags
+
+if ($Tag -ne "") {
+    # Verificar que el tag existe
+    $tagExists = git tag -l $Tag
+    if (-not $tagExists) {
+        Write-Host ""
+        Write-Host "ERROR: El tag '$Tag' no existe en el remote '$TEMPLATE_REMOTE'." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Tags disponibles:"
+        git tag -l
+        Write-Host ""
+        exit 1
+    }
+}
 
 # Recordar la rama actual
 $CURRENT_BRANCH = git branch --show-current
@@ -63,8 +90,8 @@ if ($branchExists) {
 
 # Mergear el template (--no-commit para poder revisar antes de commitear)
 # git devuelve exit code 1 con --no-commit incluso cuando el merge fue exitoso; es esperado.
-Write-Host "Mergeando cambios del template..." -ForegroundColor Yellow
-git merge "$TEMPLATE_REMOTE/$TEMPLATE_BRANCH" --allow-unrelated-histories --no-commit --no-ff
+Write-Host "Mergeando $MERGE_REF..." -ForegroundColor Yellow
+git merge $MERGE_REF --allow-unrelated-histories --no-commit --no-ff
 $mergeExit = $LASTEXITCODE
 
 if ($mergeExit -ne 0 -and $mergeExit -ne 1) {
@@ -74,12 +101,16 @@ if ($mergeExit -ne 0 -and $mergeExit -ne 1) {
 }
 
 Write-Host ""
-Write-Host "Listo. Cambios del template en la rama '$SYNC_BRANCH'." -ForegroundColor Green
+Write-Host "Listo. Cambios de $MERGE_REF en la rama '$SYNC_BRANCH'." -ForegroundColor Green
 Write-Host ""
 Write-Host "Proximos pasos:" -ForegroundColor White
 Write-Host "  1. Revisa los cambios:     git diff $CURRENT_BRANCH $SYNC_BRANCH"
 Write-Host "  2. Resuelve conflictos si los hay"
-Write-Host "  3. Commitea el merge:      git add . ; git commit -m 'chore: sync desde template'"
+if ($Tag -ne "") {
+    Write-Host "  3. Commitea el merge:      git add . ; git commit -m 'chore: sync desde template $Tag'"
+} else {
+    Write-Host "  3. Commitea el merge:      git add . ; git commit -m 'chore: sync desde template'"
+}
 Write-Host "  4. Volvé a tu rama:        git checkout $CURRENT_BRANCH ; git merge $SYNC_BRANCH"
 Write-Host "  5. Eliminá la rama temp:   git branch -d $SYNC_BRANCH"
 Write-Host ""
